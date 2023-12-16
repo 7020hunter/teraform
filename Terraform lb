@@ -1,0 +1,90 @@
+resource "aws_launch_template" "foo" {
+  name = "project_lonch_template"
+
+  image_id      = "ami-0f7b55661ecbbe44c"
+  instance_type = "t2.micro"
+  key_name      = "Sumedhraj EC2"
+
+  network_interfaces {
+    associate_public_ip_address = true
+  }
+
+  tag_specifications {
+    resource_type = "instance"
+
+    tags = {
+      Name = "project"
+    }
+  }
+  # user_data = base(<<EOF
+  #               #!/bin/bash
+  #               apt-get update 
+  #               apt install openjdk-11-jre-headless -y
+  #               sudo wget -O /usr/share/keyrings/jenkins-keyring.asc \
+  #                 https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
+  #               echo deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] \
+  #                 https://pkg.jenkins.io/debian-stable binary/ | sudo tee \
+  #                 /etc/apt/sources.list.d/jenkins.list > /dev/null
+  #               sudo apt-get update
+  #               sudo apt-get install jenkins -y
+  #               systemctl status jenkins
+  #                EOF
+  #                )
+}
+
+#######  AUTOSCALING  #########################
+
+resource "aws_autoscaling_group" "foo" {
+  name                      = "project-asg"
+  max_size                  = 3
+  min_size                  = 1
+  desired_capacity          = 1
+  target_group_arns = [aws_lb_target_group.foo.arn]
+
+   launch_template {
+    id      = aws_launch_template.foo.id
+    version = "$Latest"
+  }
+  vpc_zone_identifier       = ["subnet-03697a2af13c54185", "subnet-0c676a92a1c3a0bc9"]
+  
+  tag {
+    key                 = "lorem"
+    value               = "ipsum"
+    propagate_at_launch = false
+  }
+}
+
+###########    Target Group  ###########
+
+resource "aws_lb_target_group" "foo" {
+  name     = "project-tg"
+  port     = 80
+  protocol = "HTTP"
+  vpc_id = "vpc-001c5e414957bb1b8"
+}
+
+########### APPLICATION LB #########
+resource "aws_lb" "foo" {
+  name               = "project-lb"
+  internal           = false
+  load_balancer_type = "application"
+  # security_groups    = [aws_security_group.lb_sg.id]
+  subnets            = ["subnet-03697a2af13c54185", "subnet-0c676a92a1c3a0bc9"]
+
+    tags = {
+    Environment = "production"
+  }
+}
+
+resource "aws_lb_listener" "front_end" {
+  load_balancer_arn = aws_lb.foo.arn
+  port              = "80"
+  protocol          = "HTTP"
+  #ssl_policy        = "ELBSecurityPolicy-2016-08"
+  #certificate_arn   = "arn:aws:iam::187416307283:server-certificate/test_cert_rab3wuqwgja25ct3n4jdj2tzu4"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.foo.arn
+  }
+}
